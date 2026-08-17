@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { getUserById, setUserPassword } from "@/lib/db";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const s = await getSession();
-  if (!s || s.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Live DB check: a deleted/demoted admin must not be able to act on a stale cookie.
+  const me = await getCurrentUser();
+  if (!me || me.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   let body: { id?: number; password?: string } = {};
   try {

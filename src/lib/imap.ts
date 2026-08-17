@@ -1,5 +1,5 @@
 import { ImapFlow } from "imapflow";
-import { simpleParser } from "mailparser";
+import { simpleParser, type ParsedMail } from "mailparser";
 
 // Reads the shared mailbox that receives the Netflix emails (same inbox your imap.php used).
 function getConfig() {
@@ -34,9 +34,25 @@ async function withClient<T>(fn: (client: ImapFlow) => Promise<T>): Promise<T> {
   }
 }
 
+// The mailbox is shared, so we must not trust a "Netflix" display name alone — a spoofed
+// message could otherwise poison the returned code/link. Only accept mail whose PARSED
+// sender address is on a netflix.com domain.
+function isFromNetflix(parsed: ParsedMail): boolean {
+  const from = parsed.from;
+  const list = from && Array.isArray(from.value) ? from.value : [];
+  for (const a of list) {
+    const addr = (a.address || "").toLowerCase().trim();
+    const at = addr.lastIndexOf("@");
+    if (at === -1) continue;
+    const domain = addr.slice(at + 1);
+    if (domain === "netflix.com" || domain.endsWith(".netflix.com")) return true;
+  }
+  return false;
+}
+
 type Extractor = (html: string, text: string) => string | null;
 
-// Finds the newest Netflix email addressed to `email` since `sinceMs`, runs `extract` on it.
+// Finds the newest genuine Netflix email addressed to `email` since `sinceMs`, runs `extract` on it.
 async function findNewest(email: string, sinceMs: number, extract: Extractor): Promise<string | null> {
   return withClient(async (client) => {
     const lock = await client.getMailboxLock("INBOX");
@@ -49,6 +65,7 @@ async function findNewest(email: string, sinceMs: number, extract: Extractor): P
         const msg = await client.fetchOne(uid, { source: true }, { uid: true });
         if (!msg || !msg.source) continue;
         const parsed = await simpleParser(msg.source as Buffer);
+        if (!isFromNetflix(parsed)) continue; // reject spoofed / non-Netflix senders
         const html = typeof parsed.html === "string" ? parsed.html : "";
         const text = parsed.text || "";
         const found = extract(html, text);

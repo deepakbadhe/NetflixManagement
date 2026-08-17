@@ -9,9 +9,11 @@ export type Session = { uid: number; email: string; role: Role };
 
 function getSecret(): Uint8Array {
   const s = process.env.SESSION_SECRET;
-  if (!s || s.length < 8) {
-    // Keeps local dev working; you MUST set a real SESSION_SECRET in production.
-    return new TextEncoder().encode("insecure-dev-secret-please-set-SESSION_SECRET");
+  if (!s || s.length < 16) {
+    // Fail closed: never fall back to a known/default secret, or anyone could mint admin tokens.
+    throw new Error(
+      "SESSION_SECRET is missing or too short. Set a strong random value (e.g. `openssl rand -hex 32`).",
+    );
   }
   return new TextEncoder().encode(s);
 }

@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
 import { createUser, listUsers } from "@/lib/db";
 
 export const runtime = "nodejs";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+// Re-checks the LIVE database row (not just the JWT claims), so a deleted or demoted
+// admin loses access immediately even while holding a still-valid session cookie.
 async function ensureAdmin() {
-  const s = await getSession();
-  return s && s.role === "admin" ? s : null;
+  const u = await getCurrentUser();
+  return u && u.role === "admin" ? u : null;
 }
 
 export async function GET() {
